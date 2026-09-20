@@ -385,6 +385,8 @@
         <div class="step-no" id="step-no">1</div>
         <div class="txt" id="step-text">Tap the sandpaper, then the ribbon, to clean it.</div>
       </div>
+      <button class="btn btn-flame" id="step-do-btn" type="button"></button>
+      <p class="note" id="step-hint-note" data-t="exp_tap_hint">Tip: rotate the view by dragging the background, then tap the two objects the instruction names, in either order.</p>
 
       <div class="card tight" id="exp-reference" hidden>
         <div class="kv-row"><span class="k" data-t="tab_objective">Objective</span></div>
@@ -535,6 +537,11 @@ en:{
   step_collect:"Tap the watch glass, then the ash, to collect the product.",
   toast_cleaned:"Ribbon cleaned ✓", toast_pickedup:"Ribbon picked up with tongs ✓",
   toast_burning:"Ignited! Observe the white flame…", toast_collected:"Ash collected ✓ — view results",
+  exp_tap_hint:"Tip: rotate the view by dragging the background, then tap the two objects the instruction names, in either order.",
+  obj_sandpaper:"Sandpaper", obj_ribbon:"Ribbon", obj_tongs:"Tongs", obj_burner:"Burner", obj_watchglass:"Watch glass",
+  toast_selected:"{obj} selected", toast_needother:"{obj} selected — now tap {other}",
+  action_clean:"Do it: clean the ribbon", action_pickup:"Do it: pick up the ribbon",
+  action_ignite:"Do it: ignite the ribbon", action_collect:"Do it: collect the ash",
   exp_pendulum_title:"Simple Pendulum — Time Period", exp_acidbase_title:"Acid–Base Neutralisation",
   soon:"Coming soon",
   scan_card1:"Fig 4.2 — Combustion of Mg", scan_card2:"Ch. 1 — Chemical Reactions",
@@ -597,6 +604,11 @@ te:{
   step_collect:"ఉత్పత్తిని సేకరించడానికి వాచ్ గ్లాస్‌ను, తర్వాత బూడిదను నొక్కండి.",
   toast_cleaned:"రిబ్బన్ శుభ్రమైంది ✓", toast_pickedup:"చిమ్టాతో రిబ్బన్ తీసుకోబడింది ✓",
   toast_burning:"మండించబడింది! తెల్లని మంటను గమనించండి…", toast_collected:"బూడిద సేకరించబడింది ✓ — ఫలితాలు చూడండి",
+  exp_tap_hint:"సూచన: నేపథ్యాన్ని లాగడం ద్వారా దృశ్యాన్ని తిప్పండి, తర్వాత సూచనలో పేర్కొన్న రెండు వస్తువులను, ఏ క్రమంలోనైనా నొక్కండి.",
+  obj_sandpaper:"ఇసుక కాగితం", obj_ribbon:"రిబ్బన్", obj_tongs:"చిమ్టా", obj_burner:"బర్నర్", obj_watchglass:"వాచ్ గ్లాస్",
+  toast_selected:"{obj} ఎంచుకోబడింది", toast_needother:"{obj} ఎంచుకోబడింది — ఇప్పుడు {other} నొక్కండి",
+  action_clean:"ఇది చేయండి: రిబ్బన్‌ను శుభ్రం చేయండి", action_pickup:"ఇది చేయండి: రిబ్బన్‌ను తీసుకోండి",
+  action_ignite:"ఇది చేయండి: రిబ్బన్‌ను మండించండి", action_collect:"ఇది చేయండి: బూడిదను సేకరించండి",
   exp_pendulum_title:"సరళ లోలకం — కాలవ్యవధి", exp_acidbase_title:"ఆమ్ల–క్షార తటస్థీకరణ",
   soon:"త్వరలో",
   scan_card1:"చిత్రం 4.2 — Mg దహనం", scan_card2:"పాఠం 1 — రసాయన చర్యలు",
@@ -633,11 +645,11 @@ const EXPERIMENTS = [
     procedureKeys:["exp_mg_proc1","exp_mg_proc2","exp_mg_proc3","exp_mg_proc4","exp_mg_proc5"],
     observationKey:"exp_mg_observation", conclusionKey:"exp_mg_conclusion", equation:"2 Mg  +  O₂  →  2 MgO",
     steps:[
-      {textKey:"step_clean", need:["sandpaper","ribbon"], toastKey:"toast_cleaned"},
-      {textKey:"step_pickup", need:["tongs","ribbon"], toastKey:"toast_pickedup"},
-      {textKey:"step_ignite", need:["ribbon","burner"], toastKey:"toast_burning"},
+      {textKey:"step_clean", need:["sandpaper","ribbon"], toastKey:"toast_cleaned", actionKey:"action_clean"},
+      {textKey:"step_pickup", need:["tongs","ribbon"], toastKey:"toast_pickedup", actionKey:"action_pickup"},
+      {textKey:"step_ignite", need:["ribbon","burner"], toastKey:"toast_burning", actionKey:"action_ignite"},
       {textKey:"step_observe", need:["burner","burner"], toastKey:"toast_burning", auto:true},
-      {textKey:"step_collect", need:["watchglass","ribbon"], toastKey:"toast_collected"}
+      {textKey:"step_collect", need:["watchglass","ribbon"], toastKey:"toast_collected", actionKey:"action_collect"}
     ]
   },
   { id:"pendulum", subject:"physics", available:false, titleKey:"exp_pendulum_title" },
@@ -768,6 +780,14 @@ function makeSpriteTexture(){
 }
 const SPRITE_TEX = (typeof THREE!=="undefined") ? makeSpriteTexture() : null;
 
+/* Invisible, oversized box added to an object purely so it's easy to tap on a small screen. */
+function addHitPadding(obj, size, center){
+  const pad = new THREE.Mesh(new THREE.BoxGeometry(size[0],size[1],size[2]), new THREE.MeshBasicMaterial({transparent:true, opacity:0, depthWrite:false}));
+  if(center) pad.position.set(center[0],center[1],center[2]);
+  obj.add(pad);
+  return pad;
+}
+
 function buildBench(){
   const group = new THREE.Group();
   const top = new THREE.Mesh(new THREE.BoxGeometry(2.6,0.09,1.2), new THREE.MeshStandardMaterial({color:0x8a6a4a, roughness:.75}));
@@ -794,6 +814,7 @@ function buildBurner(){
   const light = new THREE.PointLight(0xffb066, 0.9, 2.2); light.position.y = 0.2; flameGroup.add(light);
   g.add(flameGroup);
   g.userData.flameGroup = flameGroup;
+  addHitPadding(g, [0.34,0.62,0.34], [0,0.27,0]);
   return g;
 }
 
@@ -802,22 +823,27 @@ function buildTongs(){
   const mat = new THREE.MeshStandardMaterial({color:0x9aa3ab, metalness:.7, roughness:.35});
   const a = new THREE.Mesh(new THREE.BoxGeometry(0.5,0.025,0.03), mat); a.position.set(0,0.02,0.02); a.rotation.z=0.05; g.add(a);
   const b = new THREE.Mesh(new THREE.BoxGeometry(0.5,0.025,0.03), mat); b.position.set(0,-0.02,-0.02); b.rotation.z=-0.05; g.add(b);
+  addHitPadding(g, [0.6,0.22,0.22]);
   return g;
 }
 function buildSandpaper(){
   const m = new THREE.Mesh(new THREE.BoxGeometry(0.22,0.015,0.16), new THREE.MeshStandardMaterial({color:0xc9a15a, roughness:1}));
-  m.name = "sandpaper"; return m;
+  m.name = "sandpaper";
+  addHitPadding(m, [0.4,0.18,0.34]);
+  return m;
 }
 function buildRibbon(){
   const g = new THREE.Group(); g.name="ribbon";
   const strip = new THREE.Mesh(new THREE.BoxGeometry(0.5,0.01,0.045), new THREE.MeshStandardMaterial({color:0xb9bfc2, metalness:.55, roughness:.5, emissive:0x000000}));
   strip.name="ribbonStrip"; g.add(strip);
+  addHitPadding(g, [0.62,0.2,0.24]);
   return g;
 }
 function buildWatchGlass(){
   const g = new THREE.Group(); g.name="watchglass";
   const glass = new THREE.Mesh(new THREE.SphereGeometry(0.16,20,10,0,Math.PI*2,0,Math.PI/2.4), new THREE.MeshPhysicalMaterial({color:0xdfeee8, transparent:true, opacity:.35, roughness:.15, metalness:0, side:THREE.DoubleSide}));
   glass.rotation.x = Math.PI; g.add(glass);
+  addHitPadding(g, [0.38,0.18,0.38], [0,0.02,0]);
   return g;
 }
 function buildBeaker(){
@@ -1084,6 +1110,7 @@ function toast(msg){
   clearTimeout(el._h); el._h = setTimeout(()=>{ el.style.opacity="0"; }, 1600);
 }
 
+const OBJECT_LABEL_KEYS = {sandpaper:"obj_sandpaper", ribbon:"obj_ribbon", tongs:"obj_tongs", burner:"obj_burner", watchglass:"obj_watchglass"};
 let tapBuffer = [];
 function handleExperimentTap(name){
   const exp = EXPERIMENTS.find(e=>e.id===currentExpId);
@@ -1097,6 +1124,13 @@ function handleExperimentTap(name){
   if(matches){
     tapBuffer = [];
     completeStep(step);
+  } else {
+    const otherNeeded = need.find(n=>n!==name) || need[0];
+    if(need.includes(name)){
+      toast(t("toast_needother").replace("{obj}", t(OBJECT_LABEL_KEYS[name]||name)).replace("{other}", t(OBJECT_LABEL_KEYS[otherNeeded]||otherNeeded)));
+    } else {
+      toast(t("toast_selected").replace("{obj}", t(OBJECT_LABEL_KEYS[name]||name)));
+    }
   }
 }
 function completeStep(step){
@@ -1123,12 +1157,29 @@ function renderStepBanner(){
   const dotsWrap = document.getElementById("step-dots");
   dotsWrap.innerHTML = exp.steps.map((s,i)=>`<i class="${i<stepIndex?'done':(i===stepIndex?'now':'')}"></i>`).join("");
   const idx = Math.min(stepIndex, exp.steps.length-1);
+  const curStep = exp.steps[idx];
   document.getElementById("step-no").textContent = Math.min(stepIndex+1, exp.steps.length);
-  document.getElementById("step-text").textContent = t(exp.steps[idx].textKey);
+  document.getElementById("step-text").textContent = t(curStep.textKey);
+
+  const doBtn = document.getElementById("step-do-btn");
+  if(curStep.auto || stepIndex>=exp.steps.length){
+    doBtn.hidden = true;
+  } else {
+    doBtn.hidden = false;
+    doBtn.textContent = "⚡ " + t(curStep.actionKey);
+  }
 
   document.getElementById("ref-objective").textContent = t(exp.objectiveKey);
   document.getElementById("ref-procedure").innerHTML = exp.procedureKeys.map((k,i)=>`<div class="list-item"><span class="num">${i+1}</span><span>${t(k)}</span></div>`).join("");
 }
+document.getElementById("step-do-btn").addEventListener("click", ()=>{
+  const exp = EXPERIMENTS.find(e=>e.id===currentExpId);
+  if(!exp || stepIndex>=exp.steps.length) return;
+  const step = exp.steps[stepIndex];
+  if(step.auto) return;
+  tapBuffer = [];
+  completeStep(step);
+});
 document.getElementById("exp-info-toggle").addEventListener("click", ()=>{
   const el = document.getElementById("exp-reference");
   el.hidden = !el.hidden;
