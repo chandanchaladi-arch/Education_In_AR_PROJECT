@@ -1,0 +1,1348 @@
+<title>Edu-AR Lab</title>
+<meta name="description" content="Interactive prototype of an AR virtual science lab: place a lab bench, perform the magnesium-ribbon combustion experiment, and ask the AI mentor.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Manrope:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+  :root{
+    --bg:#F5F7F3; --surface:#FFFFFF; --surface-2:#EAF0EA; --surface-3:#DCE6DC;
+    --ink:#122019; --ink-dim:#4C5C52; --ink-faint:#7C8C82;
+    --accent:#1E7A5C; --accent-ink:#FFFFFF; --accent-soft:#DCF0E6;
+    --flame:#E4572E; --flame-soft:#FBE3D8;
+    --gold:#C98A2A; --gold-soft:#F5E6C8;
+    --border:#D6E0D6; --border-strong:#B7C6B8;
+    --shadow: 0 10px 30px -12px rgba(18,32,25,.25);
+    --radius-lg:22px; --radius-md:14px; --radius-sm:9px;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0D1512; --surface:#152019; --surface-2:#1B2A22; --surface-3:#24352B;
+      --ink:#EAF2EC; --ink-dim:#A3B6AB; --ink-faint:#728179;
+      --accent:#3FBE8E; --accent-ink:#08150F; --accent-soft:#1D3A2C;
+      --flame:#FF7C52; --flame-soft:#3A2419;
+      --gold:#E7B84E; --gold-soft:#3A2E14;
+      --border:#26362C; --border-strong:#34493B;
+      --shadow: 0 10px 30px -10px rgba(0,0,0,.5);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0D1512; --surface:#152019; --surface-2:#1B2A22; --surface-3:#24352B;
+    --ink:#EAF2EC; --ink-dim:#A3B6AB; --ink-faint:#728179;
+    --accent:#3FBE8E; --accent-ink:#08150F; --accent-soft:#1D3A2C;
+    --flame:#FF7C52; --flame-soft:#3A2419;
+    --gold:#E7B84E; --gold-soft:#3A2E14;
+    --border:#26362C; --border-strong:#34493B;
+    --shadow: 0 10px 30px -10px rgba(0,0,0,.5);
+    color-scheme: dark;
+  }
+  *{box-sizing:border-box;}
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:'Manrope',system-ui,sans-serif;
+    display:flex; justify-content:center;
+    padding-inline:16px; padding-block:18px;
+  }
+  h1,h2,h3,.display{font-family:'Sora',system-ui,sans-serif; text-wrap:balance;}
+  .mono{font-family:'IBM Plex Mono',ui-monospace,monospace;}
+  button{font-family:inherit; cursor:pointer;}
+  ::selection{background:var(--accent-soft);}
+
+  #phone{
+    width:100%; max-width:420px;
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:32px;
+    box-shadow:var(--shadow);
+    overflow:hidden;
+    display:flex; flex-direction:column;
+    min-height:780px;
+    position:relative;
+  }
+  #topbar{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:14px 16px 10px;
+    border-bottom:1px solid var(--border);
+    flex-shrink:0;
+  }
+  #brand{display:flex; align-items:center; gap:9px;}
+  #brand .mark{
+    width:26px; height:26px; border-radius:8px;
+    background:linear-gradient(155deg,var(--accent),var(--gold));
+    flex-shrink:0;
+  }
+  #brand .name{font-family:'Sora'; font-weight:700; font-size:15px; letter-spacing:.01em;}
+  #topbar .tools{display:flex; align-items:center; gap:6px;}
+  .chip-btn{
+    border:1px solid var(--border); background:var(--surface-2); color:var(--ink-dim);
+    border-radius:100px; padding:6px 11px; font-size:12px; font-weight:600;
+    display:flex; align-items:center; gap:5px;
+  }
+  .chip-btn:hover{border-color:var(--border-strong); color:var(--ink);}
+  .chip-btn.active{background:var(--accent-soft); color:var(--accent); border-color:var(--accent);}
+
+  #screens{flex:1; position:relative; overflow:hidden;}
+  .screen{
+    position:absolute; inset:0; overflow-y:auto; overflow-x:hidden;
+    padding:18px 18px 26px;
+    display:flex; flex-direction:column; gap:16px;
+    animation:fadeIn .25s ease;
+  }
+  @keyframes fadeIn{from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:none;}}
+  [hidden]{display:none!important;}
+
+  .eyebrow{font-size:11px; font-weight:700; letter-spacing:.09em; text-transform:uppercase; color:var(--accent);}
+  .h-title{font-size:21px; font-weight:700; line-height:1.2; margin:2px 0 0;}
+  .sub{color:var(--ink-dim); font-size:13.5px; line-height:1.5;}
+
+  .card{
+    background:var(--surface-2); border:1px solid var(--border);
+    border-radius:var(--radius-md); padding:14px 15px;
+  }
+  .card.tight{padding:11px 13px;}
+
+  .subject-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .tile{
+    background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius-md);
+    padding:14px 12px; text-align:left; display:flex; flex-direction:column; gap:6px;
+  }
+  .tile.selected{border-color:var(--accent); background:var(--accent-soft);}
+  .tile .t-icon{font-size:20px;}
+  .tile .t-label{font-weight:700; font-size:13.5px;}
+  .tile .t-sub{font-size:11px; color:var(--ink-faint);}
+
+  .exp-row{
+    display:flex; align-items:center; gap:12px;
+    background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius-md);
+    padding:12px 13px; text-align:left;
+  }
+  .exp-row.disabled{opacity:.5;}
+  .exp-row .swatch{
+    width:42px; height:42px; border-radius:11px; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center; font-size:19px;
+    background:linear-gradient(155deg,var(--flame-soft),var(--gold-soft));
+  }
+  .exp-row .body{flex:1; min-width:0;}
+  .exp-row .name{font-weight:700; font-size:13.5px;}
+  .exp-row .meta{font-size:11px; color:var(--ink-faint); margin-top:2px;}
+  .badge{
+    font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em;
+    padding:3px 7px; border-radius:100px; background:var(--surface-3); color:var(--ink-dim);
+    white-space:nowrap;
+  }
+  .badge.new{background:var(--accent-soft); color:var(--accent);}
+
+  .btn{
+    border:none; border-radius:100px; padding:13px 18px; font-weight:700; font-size:14px;
+    display:flex; align-items:center; justify-content:center; gap:7px; width:100%;
+  }
+  .btn-primary{background:var(--accent); color:var(--accent-ink);}
+  .btn-primary:active{filter:brightness(.94);}
+  .btn-ghost{background:var(--surface-2); color:var(--ink); border:1px solid var(--border);}
+  .btn-flame{background:var(--flame); color:#fff;}
+  .btn:disabled{opacity:.4;}
+  .btn-row{display:flex; gap:8px;}
+  .btn-row .btn{flex:1;}
+  .btn-sm{padding:9px 14px; font-size:12.5px; width:auto;}
+
+  .icon-btn{
+    width:34px; height:34px; border-radius:50%; border:1px solid var(--border);
+    background:var(--surface-2); color:var(--ink-dim);
+    display:flex; align-items:center; justify-content:center; font-size:15px; flex-shrink:0;
+  }
+
+  .tabbar{display:flex; gap:4px; background:var(--surface-2); border:1px solid var(--border); border-radius:100px; padding:3px;}
+  .tabbar button{flex:1; border:none; background:transparent; border-radius:100px; padding:7px 4px; font-size:12px; font-weight:700; color:var(--ink-dim);}
+  .tabbar button.active{background:var(--surface); color:var(--accent); box-shadow:0 1px 3px rgba(0,0,0,.12);}
+  .tabpanel{display:flex; flex-direction:column; gap:8px;}
+  .list-item{display:flex; gap:9px; font-size:13px; line-height:1.45;}
+  .list-item .num{
+    width:19px; height:19px; border-radius:6px; background:var(--accent-soft); color:var(--accent);
+    font-size:10.5px; font-weight:800; display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:1px;
+  }
+
+  /* --- AR / 3D viewport --- */
+  .viewport-wrap{
+    position:relative; border-radius:var(--radius-lg); overflow:hidden; border:1px solid var(--border);
+    background:#0b1a13; aspect-ratio:3/4; flex-shrink:0;
+  }
+  .viewport-wrap canvas{display:block; width:100%; height:100%; touch-action:none;}
+  .vp-overlay{position:absolute; inset:0; pointer-events:none;}
+  .vp-scanning{
+    position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:10px; color:#EAF2EC; text-align:center; padding:20px;
+  }
+  .scan-ring{
+    width:64px; height:64px; border-radius:50%; border:2px solid rgba(255,255,255,.25);
+    border-top-color:#3FBE8E; animation:spin 1.1s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .vp-tag{
+    position:absolute; left:10px; top:10px; pointer-events:none;
+    background:rgba(8,16,12,.55); backdrop-filter:blur(4px); color:#EAF2EC;
+    font-size:10.5px; font-weight:700; padding:5px 9px; border-radius:100px;
+    display:flex; align-items:center; gap:5px;
+  }
+  .vp-tag .dot{width:6px; height:6px; border-radius:50%; background:#3FBE8E;}
+  .vp-hint{
+    position:absolute; left:10px; right:10px; bottom:10px; pointer-events:none;
+    background:rgba(8,16,12,.6); backdrop-filter:blur(4px); color:#EAF2EC;
+    font-size:12px; font-weight:600; padding:9px 11px; border-radius:12px; text-align:center;
+  }
+  .vp-ar-btn{
+    position:absolute; right:9px; top:9px; pointer-events:auto;
+    background:rgba(8,16,12,.55); color:#EAF2EC; border:1px solid rgba(255,255,255,.25);
+    border-radius:100px; padding:6px 10px; font-size:10.5px; font-weight:700;
+  }
+
+  .step-banner{
+    display:flex; align-items:center; gap:11px;
+    background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius-md);
+    padding:11px 12px;
+  }
+  .step-banner .step-no{
+    width:30px; height:30px; border-radius:9px; background:var(--accent); color:var(--accent-ink);
+    font-weight:800; font-size:13px; display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  }
+  .step-banner .txt{flex:1; font-size:12.5px; font-weight:600; line-height:1.4;}
+  .progress-dots{display:flex; gap:5px; padding:0 2px;}
+  .progress-dots i{flex:1; height:4px; border-radius:4px; background:var(--surface-3);}
+  .progress-dots i.done{background:var(--accent);}
+  .progress-dots i.now{background:var(--gold);}
+
+  .tray{display:flex; gap:8px; overflow-x:auto; padding-bottom:2px;}
+  .tray-item{
+    flex-shrink:0; width:64px; display:flex; flex-direction:column; align-items:center; gap:5px;
+    background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius-sm); padding:9px 6px;
+    font-size:9.5px; font-weight:700; text-align:center; color:var(--ink-dim);
+  }
+  .tray-item .ic{font-size:19px;}
+  .tray-item.active{border-color:var(--accent); color:var(--accent); background:var(--accent-soft);}
+
+  .result-eq{
+    background:var(--surface); border:1px dashed var(--border-strong); border-radius:var(--radius-sm);
+    padding:12px; text-align:center; font-size:15px; font-weight:600;
+  }
+  .kv-row{display:flex; justify-content:space-between; gap:10px; font-size:12.5px; padding:7px 0; border-bottom:1px solid var(--border);}
+  .kv-row:last-child{border-bottom:none;}
+  .kv-row .k{color:var(--ink-faint);}
+  .kv-row .v{font-weight:700;}
+
+  /* Mentor */
+  #mentor-fab{
+    position:absolute; right:16px; bottom:78px; z-index:5;
+    width:52px; height:52px; border-radius:50%; border:none;
+    background:var(--gold); color:#241a06; font-size:21px;
+    box-shadow:0 8px 18px -6px rgba(0,0,0,.4);
+    display:flex; align-items:center; justify-content:center;
+  }
+  #mentor-panel{
+    position:absolute; inset:0; background:var(--surface); z-index:10;
+    display:flex; flex-direction:column;
+  }
+  #mentor-head{display:flex; align-items:center; gap:9px; padding:14px 16px; border-bottom:1px solid var(--border);}
+  #mentor-head .av{width:32px; height:32px; border-radius:50%; background:linear-gradient(155deg,var(--gold),var(--flame)); flex-shrink:0;}
+  #mentor-log{flex:1; overflow-y:auto; padding:14px 16px; display:flex; flex-direction:column; gap:10px;}
+  .msg{max-width:82%; padding:9px 12px; border-radius:14px; font-size:13px; line-height:1.45;}
+  .msg.bot{background:var(--surface-2); border:1px solid var(--border); align-self:flex-start; border-bottom-left-radius:4px;}
+  .msg.user{background:var(--accent); color:var(--accent-ink); align-self:flex-end; border-bottom-right-radius:4px; font-weight:600;}
+  .suggest-row{display:flex; flex-wrap:wrap; gap:6px; padding:0 16px 10px;}
+  .suggest-chip{
+    border:1px solid var(--border); background:var(--surface-2); color:var(--ink-dim);
+    border-radius:100px; padding:6px 10px; font-size:11.5px; font-weight:600;
+  }
+  #mentor-input{display:flex; gap:8px; padding:12px 16px; border-top:1px solid var(--border);}
+  #mentor-input input{
+    flex:1; border:1px solid var(--border); background:var(--surface-2); color:var(--ink);
+    border-radius:100px; padding:10px 14px; font-size:13px; font-family:inherit; min-width:0;
+  }
+  #mentor-input input:focus{outline:2px solid var(--accent); outline-offset:1px;}
+  #mentor-input button{
+    width:40px; height:40px; border-radius:50%; border:none; background:var(--accent); color:var(--accent-ink);
+    flex-shrink:0; font-size:15px;
+  }
+
+  /* Scan grid */
+  .scan-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .scan-card{
+    border-radius:var(--radius-md); overflow:hidden; border:1px solid var(--border);
+    background:var(--surface-2); text-align:left; display:flex; flex-direction:column;
+  }
+  .scan-card .thumb{
+    aspect-ratio:4/3; display:flex; align-items:center; justify-content:center; font-size:26px;
+  }
+  .scan-card .cap{padding:8px 9px; font-size:11px; font-weight:700;}
+
+  /* Bottom nav */
+  #bottomnav{
+    display:flex; border-top:1px solid var(--border); flex-shrink:0; background:var(--surface);
+  }
+  #bottomnav button{
+    flex:1; border:none; background:transparent; padding:10px 4px 12px; display:flex; flex-direction:column;
+    align-items:center; gap:3px; font-size:10px; font-weight:700; color:var(--ink-faint);
+  }
+  #bottomnav button.active{color:var(--accent);}
+  #bottomnav .ic{font-size:18px;}
+
+  .note{
+    font-size:11.5px; color:var(--ink-faint); background:var(--surface-2); border:1px solid var(--border);
+    border-radius:var(--radius-sm); padding:9px 11px; line-height:1.5;
+  }
+  a.inline{color:var(--accent); font-weight:700; text-decoration:none;}
+
+  @media (max-width:420px){
+    body{padding-inline:0; padding-block:0;}
+    #phone{max-width:100%; min-height:100vh; border-radius:0; border:none;}
+  }
+</style>
+
+<div id="phone">
+  <div id="topbar">
+    <div id="brand"><div class="mark"></div><div class="name">Edu-AR</div></div>
+    <div class="tools">
+      <button class="chip-btn" id="lang-toggle" type="button">EN</button>
+      <button class="icon-btn" id="theme-toggle" type="button" title="Toggle theme" aria-label="Toggle theme">◐</button>
+    </div>
+  </div>
+
+  <div id="screens">
+    <!-- HOME -->
+    <section class="screen" id="screen-home">
+      <div>
+        <div class="eyebrow" data-t="home_eyebrow">AR Science Lab · Class 10</div>
+        <h1 class="h-title" data-t="home_title">What are we learning today?</h1>
+        <p class="sub" data-t="home_sub">Pick a subject, then an experiment to perform in augmented reality.</p>
+      </div>
+
+      <div class="subject-grid" id="subject-grid"></div>
+
+      <div style="display:flex; align-items:center; justify-content:space-between;">
+        <h3 style="font-size:13px; margin:0;" data-t="home_experiments">Experiments</h3>
+        <span class="badge" id="exp-count-badge">1 / 3</span>
+      </div>
+      <div id="exp-list" style="display:flex; flex-direction:column; gap:9px;"></div>
+
+      <div class="btn-row">
+        <button class="btn btn-ghost" id="go-free" type="button">🧪 <span data-t="home_free">Free Mode</span></button>
+        <button class="btn btn-ghost" id="go-scan" type="button">📷 <span data-t="home_scan">Scan Book</span></button>
+      </div>
+    </section>
+
+    <!-- EXPERIMENT INFO -->
+    <section class="screen" id="screen-info" hidden>
+      <button class="chip-btn" data-back="screen-home" style="align-self:flex-start;">← <span data-t="back">Back</span></button>
+      <div>
+        <div class="eyebrow" data-t="info_eyebrow">Chemistry · Combination Reaction</div>
+        <h1 class="h-title" id="info-title">Burning Magnesium Ribbon in Air</h1>
+      </div>
+
+      <div class="tabbar" id="info-tabs">
+        <button class="active" data-tab="objective" data-t="tab_objective">Objective</button>
+        <button data-tab="apparatus" data-t="tab_apparatus">Apparatus</button>
+        <button data-tab="procedure" data-t="tab_procedure">Procedure</button>
+      </div>
+
+      <div class="tabpanel" id="tab-objective"><p class="sub" id="obj-text"></p></div>
+      <div class="tabpanel" id="tab-apparatus" hidden></div>
+      <div class="tabpanel" id="tab-procedure" hidden></div>
+
+      <button class="btn btn-primary" id="start-placement" type="button">📱 <span data-t="info_start">Scan Surface &amp; Start</span></button>
+    </section>
+
+    <!-- PLACEMENT (AR) -->
+    <section class="screen" id="screen-placement" hidden>
+      <div>
+        <div class="eyebrow" data-t="place_eyebrow">Step 1</div>
+        <h1 class="h-title" data-t="place_title">Place your lab bench</h1>
+      </div>
+      <div class="viewport-wrap" id="vp-placement">
+        <div class="vp-scanning" id="scan-overlay">
+          <div class="scan-ring"></div>
+          <div style="font-weight:700; font-size:13px;" data-t="place_scanning">Scanning for a flat surface…</div>
+        </div>
+        <div class="vp-tag" id="ar-tag" hidden><span class="dot"></span><span data-t="place_surfacefound">Surface found</span></div>
+        <button class="vp-ar-btn" id="try-real-ar" type="button" data-t="place_tryar">Try device AR</button>
+        <div class="vp-hint" id="place-hint" hidden data-t="place_hint">Tap the floor to place the bench</div>
+      </div>
+      <p class="note" id="ar-note" data-t="place_note">This browser preview simulates AR plane detection with a 3D grid. The Unity/ARCore app replaces the grid with your live camera feed.</p>
+    </section>
+
+    <!-- EXPERIMENT (interactive) -->
+    <section class="screen" id="screen-experiment" hidden style="position:relative;">
+      <div style="display:flex; align-items:center; justify-content:space-between;">
+        <div class="eyebrow" id="exp-live-eyebrow" data-t="exp_eyebrow">Interactive Experiment</div>
+        <button class="chip-btn" id="exp-info-toggle" type="button" data-t="exp_ref">Reference</button>
+      </div>
+
+      <div class="viewport-wrap" id="vp-experiment">
+        <div class="vp-tag"><span class="dot"></span><span id="exp-object-count">5 objects tracked</span></div>
+      </div>
+
+      <div class="progress-dots" id="step-dots"></div>
+      <div class="step-banner">
+        <div class="step-no" id="step-no">1</div>
+        <div class="txt" id="step-text">Tap the sandpaper, then the ribbon, to clean it.</div>
+      </div>
+
+      <div class="card tight" id="exp-reference" hidden>
+        <div class="kv-row"><span class="k" data-t="tab_objective">Objective</span></div>
+        <p class="sub" id="ref-objective" style="margin:2px 0 8px;"></p>
+        <div class="kv-row"><span class="k" data-t="tab_procedure">Procedure</span></div>
+        <div id="ref-procedure" style="margin-top:6px;"></div>
+      </div>
+    </section>
+
+    <!-- RESULT -->
+    <section class="screen" id="screen-result" hidden>
+      <div>
+        <div class="eyebrow" style="color:var(--gold);" data-t="result_eyebrow">Experiment Complete</div>
+        <h1 class="h-title" data-t="result_title">Observation &amp; Result</h1>
+      </div>
+      <div class="card">
+        <div class="kv-row"><span class="k" data-t="tab_objective2">Observation</span></div>
+        <p class="sub" id="result-observation" style="margin:4px 0 0;"></p>
+      </div>
+      <div class="result-eq mono" id="result-equation"></div>
+      <div class="card">
+        <div class="kv-row"><span class="k" data-t="result_conclusion">Conclusion</span></div>
+        <p class="sub" id="result-conclusion-text" style="margin:4px 0 0;"></p>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-ghost" id="ask-mentor-from-result" type="button">💬 <span data-t="result_ask">Ask AI Mentor</span></button>
+        <button class="btn btn-primary" id="done-experiment" type="button" data-t="result_done">Done</button>
+      </div>
+    </section>
+
+    <!-- FREE MODE -->
+    <section class="screen" id="screen-free" hidden style="position:relative;">
+      <button class="chip-btn" data-back="screen-home" style="align-self:flex-start;">← <span data-t="back">Back</span></button>
+      <div>
+        <div class="eyebrow" data-t="free_eyebrow">Free Experiment Mode</div>
+        <h1 class="h-title" data-t="free_title">Explore the apparatus</h1>
+        <p class="sub" data-t="free_sub">No steps, no scoring — place, move and combine equipment freely.</p>
+      </div>
+      <div class="viewport-wrap" id="vp-free"></div>
+      <div class="tray" id="free-tray"></div>
+      <p class="note" id="free-hint" data-t="free_hint">Tap an item to add it to the bench, then drag on the bench to reposition it.</p>
+    </section>
+
+    <!-- SCAN TEXTBOOK -->
+    <section class="screen" id="screen-scan" hidden>
+      <button class="chip-btn" data-back="screen-home" style="align-self:flex-start;">← <span data-t="back">Back</span></button>
+      <div>
+        <div class="eyebrow" data-t="scan_eyebrow">Textbook Recognition</div>
+        <h1 class="h-title" data-t="scan_title">Scan a page or figure</h1>
+        <p class="sub" data-t="scan_sub">In the demo, tap a sample page below instead of using the live camera.</p>
+      </div>
+      <div class="scan-grid" id="scan-grid"></div>
+      <p class="note" data-t="scan_note">The real app matches the camera image against a textbook index, then opens the matching AR experiment, an info card, or a short video.</p>
+    </section>
+
+    <!-- PROGRESS -->
+    <section class="screen" id="screen-progress" hidden>
+      <div>
+        <div class="eyebrow" data-t="progress_eyebrow">Your Learning</div>
+        <h1 class="h-title" data-t="progress_title">Progress</h1>
+      </div>
+      <div class="card">
+        <div class="kv-row"><span class="k" data-t="progress_attempted">Attempted</span><span class="v" id="stat-attempted">0</span></div>
+        <div class="kv-row"><span class="k" data-t="progress_completed">Completed</span><span class="v" id="stat-completed">0</span></div>
+      </div>
+      <div id="progress-list" style="display:flex; flex-direction:column; gap:9px;"></div>
+      <p class="note" data-t="progress_note">Stored on this device only, for this demo. The full app syncs progress to a student account for teacher analytics.</p>
+    </section>
+  </div>
+
+  <div id="bottomnav">
+    <button class="active" data-nav="screen-home" type="button"><span class="ic">🏠</span><span data-t="nav_learn">Learn</span></button>
+    <button data-nav="screen-free" type="button"><span class="ic">🧪</span><span data-t="nav_free">Free Lab</span></button>
+    <button data-nav="screen-scan" type="button"><span class="ic">📷</span><span data-t="nav_scan">Scan</span></button>
+    <button data-nav="screen-progress" type="button"><span class="ic">📈</span><span data-t="nav_progress">Progress</span></button>
+  </div>
+
+  <button id="mentor-fab" type="button" title="AI Mentor">💬</button>
+  <div id="mentor-panel" hidden>
+    <div id="mentor-head">
+      <div class="av"></div>
+      <div style="flex:1;">
+        <div style="font-weight:700; font-size:13.5px;" data-t="mentor_name">AI Mentor</div>
+        <div style="font-size:11px; color:var(--ink-faint);" data-t="mentor_sub">Ask about this experiment</div>
+      </div>
+      <button class="icon-btn" id="mentor-close" type="button">✕</button>
+    </div>
+    <div id="mentor-log"></div>
+    <div class="suggest-row" id="mentor-suggest"></div>
+    <div id="mentor-input">
+      <input type="text" id="mentor-text" data-t-ph="mentor_placeholder" placeholder="Type a question…">
+      <button id="mentor-send" type="button">➤</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ---------------------------------------------------------------------- */
+/*  i18n                                                                   */
+/* ---------------------------------------------------------------------- */
+const I18N = {
+en:{
+  home_eyebrow:"AR Science Lab · Class 10", home_title:"What are we learning today?",
+  home_sub:"Pick a subject, then an experiment to perform in augmented reality.",
+  home_experiments:"Experiments", home_free:"Free Mode", home_scan:"Scan Book",
+  subj_chem:"Chemistry", subj_chem_sub:"12 topics", subj_phys:"Physics", subj_phys_sub:"9 topics",
+  back:"Back",
+  info_eyebrow:"Chemistry · Combination Reaction", info_start:"Scan Surface & Start",
+  tab_objective:"Objective", tab_apparatus:"Apparatus", tab_procedure:"Procedure",
+  place_eyebrow:"Step 1", place_title:"Place your lab bench",
+  place_scanning:"Scanning for a flat surface…", place_surfacefound:"Surface found",
+  place_tryar:"Try device AR", place_hint:"Tap the floor to place the bench",
+  place_note:"This browser preview simulates AR plane detection with a 3D grid. The Unity/ARCore app replaces the grid with your live camera feed.",
+  exp_eyebrow:"Interactive Experiment", exp_ref:"Reference",
+  result_eyebrow:"Experiment Complete", result_title:"Observation & Result",
+  tab_objective2:"Observation", result_conclusion:"Conclusion", result_ask:"Ask AI Mentor", result_done:"Done",
+  free_eyebrow:"Free Experiment Mode", free_title:"Explore the apparatus",
+  free_sub:"No steps, no scoring — place, move and combine equipment freely.",
+  free_hint:"Tap an item to add it to the bench, then drag on the bench to reposition it.",
+  scan_eyebrow:"Textbook Recognition", scan_title:"Scan a page or figure",
+  scan_sub:"In the demo, tap a sample page below instead of using the live camera.",
+  scan_note:"The real app matches the camera image against a textbook index, then opens the matching AR experiment, an info card, or a short video.",
+  progress_eyebrow:"Your Learning", progress_title:"Progress",
+  progress_attempted:"Attempted", progress_completed:"Completed",
+  progress_note:"Stored on this device only, for this demo. The full app syncs progress to a student account for teacher analytics.",
+  nav_learn:"Learn", nav_free:"Free Lab", nav_scan:"Scan", nav_progress:"Progress",
+  mentor_name:"AI Mentor", mentor_sub:"Ask about this experiment", mentor_placeholder:"Type a question…",
+  mentor_intro:"Hi! I'm your AI Mentor. Ask me why the ribbon glows, what the ash is, or what to do next.",
+  mentor_fallback:"Good question — in the full app I'd answer this with a Claude-powered explanation tuned to your class level. For this demo, try one of the suggestions below.",
+  exp_mg_title:"Burning Magnesium Ribbon in Air", exp_mg_meta:"Chemistry · Chemical Reactions",
+  exp_mg_objective:"To observe the combustion of magnesium ribbon in air and identify the type of chemical reaction that occurs.",
+  exp_mg_app1:"A 4–5 cm strip of magnesium ribbon", exp_mg_app2:"A pair of tongs", exp_mg_app3:"Sandpaper (emery paper)",
+  exp_mg_app4:"A spirit lamp / burner", exp_mg_app5:"A watch glass",
+  exp_mg_proc1:"Clean the magnesium ribbon with sandpaper to remove the oxide layer.",
+  exp_mg_proc2:"Hold the cleaned ribbon firmly with a pair of tongs.",
+  exp_mg_proc3:"Bring the ribbon close to the burner flame.",
+  exp_mg_proc4:"Observe the ribbon burning with a dazzling white light.",
+  exp_mg_proc5:"Collect the white ash formed in a watch glass.",
+  exp_mg_observation:"The magnesium ribbon burns with a dazzling white flame and forms a white powdery ash.",
+  exp_mg_conclusion:"Magnesium metal combines with oxygen from the air to form magnesium oxide. Because two substances combine to form a single product, this is a combination reaction — and since heat and light are released, it is also exothermic.",
+  step_clean:"Tap the sandpaper, then the ribbon, to clean off the oxide layer.",
+  step_pickup:"Tap the tongs, then the ribbon, to pick it up.",
+  step_ignite:"Move the ribbon to the burner flame to ignite it.",
+  step_observe:"Watch the reaction — magnesium burns fast and bright.",
+  step_collect:"Tap the watch glass, then the ash, to collect the product.",
+  toast_cleaned:"Ribbon cleaned ✓", toast_pickedup:"Ribbon picked up with tongs ✓",
+  toast_burning:"Ignited! Observe the white flame…", toast_collected:"Ash collected ✓ — view results",
+  exp_pendulum_title:"Simple Pendulum — Time Period", exp_acidbase_title:"Acid–Base Neutralisation",
+  soon:"Coming soon",
+  scan_card1:"Fig 4.2 — Combustion of Mg", scan_card2:"Ch. 1 — Chemical Reactions",
+  scan_card3:"Fig 11.3 — Simple Pendulum", scan_card4:"Ch. 2 — Acids & Bases",
+  scan_toast_match:"Match found — opening experiment…", scan_toast_nomatch:"No AR experiment yet for this page — showing info instead.",
+  q1:"Why does it burn so brightly?", q2:"What type of reaction is this?", q3:"Why clean the ribbon first?",
+  a1:"Burning magnesium releases a lot of energy very quickly as it bonds with oxygen, and much of that energy is given off as intense visible light — that's the dazzling white flare you see.",
+  a2:"This is a combination reaction: two reactants (magnesium and oxygen) join to form one product, magnesium oxide. 2Mg + O2 → 2MgO. It's also exothermic and an oxidation reaction.",
+  a3:"Magnesium reacts slowly with air even at room temperature, forming a thin oxide layer on the surface. Sanding it off exposes fresh metal so it ignites cleanly and the reaction you observe is accurate.",
+  progress_none:"No experiments attempted yet — try the one above!",
+  attempt_label:"Attempted", complete_label:"Completed",
+  free_burner:"Burner", free_tongs:"Tongs", free_ribbon:"Mg ribbon", free_beaker:"Beaker", free_watchglass:"Watch glass", free_testtube:"Test tube",
+  place_placed:"Bench placed — switching to the experiment…",
+  ar_unsupported:"Device AR isn't available in this preview window — this simulated view stands in for it.",
+  ar_checking:"Checking for AR support…"
+},
+te:{
+  home_eyebrow:"ఏఆర్ సైన్స్ ల్యాబ్ · 10వ తరగతి", home_title:"ఈరోజు ఏమి నేర్చుకుందాం?",
+  home_sub:"ముందుగా సబ్జెక్టు, తర్వాత ఆగ్మెంటెడ్ రియాలిటీలో చేయాల్సిన ప్రయోగాన్ని ఎంచుకోండి.",
+  home_experiments:"ప్రయోగాలు", home_free:"ఫ్రీ మోడ్", home_scan:"పుస్తకం స్కాన్",
+  subj_chem:"రసాయన శాస్త్రం", subj_chem_sub:"12 అంశాలు", subj_phys:"భౌతిక శాస్త్రం", subj_phys_sub:"9 అంశాలు",
+  back:"వెనుకకు",
+  info_eyebrow:"రసాయన శాస్త్రం · సంయోగ చర్య", info_start:"ఉపరితలం స్కాన్ చేసి ప్రారంభించండి",
+  tab_objective:"లక్ష్యం", tab_apparatus:"ఉపకరణాలు", tab_procedure:"పద్ధతి",
+  place_eyebrow:"దశ 1", place_title:"మీ ల్యాబ్ బల్లను ఉంచండి",
+  place_scanning:"చదునైన ఉపరితలం కోసం వెతుకుతోంది…", place_surfacefound:"ఉపరితలం కనుగొనబడింది",
+  place_tryar:"పరికర AR ప్రయత్నించండి", place_hint:"బల్లను ఉంచడానికి నేలపై నొక్కండి",
+  place_note:"ఈ బ్రౌజర్ ప్రివ్యూ 3D గ్రిడ్‌తో AR ఉపరితల గుర్తింపును అనుకరిస్తుంది. యూనిటీ/ఆర్‌కోర్ యాప్ గ్రిడ్ బదులు మీ లైవ్ కెమెరా దృశ్యాన్ని చూపుతుంది.",
+  exp_eyebrow:"ఇంటరాక్టివ్ ప్రయోగం", exp_ref:"సూచన",
+  result_eyebrow:"ప్రయోగం పూర్తయింది", result_title:"పరిశీలన & ఫలితం",
+  tab_objective2:"పరిశీలన", result_conclusion:"నిర్ధారణ", result_ask:"AI గురువును అడగండి", result_done:"పూర్తయింది",
+  free_eyebrow:"స్వేచ్ఛా ప్రయోగ మోడ్", free_title:"ఉపకరణాలను అన్వేషించండి",
+  free_sub:"దశలు లేవు, స్కోరు లేదు — స్వేచ్ఛగా ఉంచండి, కదిలించండి, కలపండి.",
+  free_hint:"వస్తువును బల్లపై చేర్చడానికి నొక్కండి, తర్వాత దానిని జరపడానికి బల్లపై లాగండి.",
+  scan_eyebrow:"పాఠ్యపుస్తక గుర్తింపు", scan_title:"పేజీ లేదా చిత్రాన్ని స్కాన్ చేయండి",
+  scan_sub:"డెమోలో, లైవ్ కెమెరాకు బదులు కింద ఉన్న నమూనా పేజీని నొక్కండి.",
+  scan_note:"అసలు యాప్ కెమెరా చిత్రాన్ని పాఠ్యపుస్తక సూచికతో సరిపోల్చి, సంబంధిత AR ప్రయోగం, సమాచార కార్డు లేదా చిన్న వీడియోను తెరుస్తుంది.",
+  progress_eyebrow:"మీ అభ్యాసం", progress_title:"పురోగతి",
+  progress_attempted:"ప్రయత్నించినవి", progress_completed:"పూర్తి చేసినవి",
+  progress_note:"ఈ డెమో కోసం, ఈ పరికరంలో మాత్రమే నిల్వ చేయబడింది. పూర్తి యాప్ ఉపాధ్యాయ విశ్లేషణ కోసం ఖాతాకు సమకాలీకరిస్తుంది.",
+  nav_learn:"నేర్చుకోండి", nav_free:"ఫ్రీ ల్యాబ్", nav_scan:"స్కాన్", nav_progress:"పురోగతి",
+  mentor_name:"AI గురువు", mentor_sub:"ఈ ప్రయోగం గురించి అడగండి", mentor_placeholder:"ప్రశ్న టైప్ చేయండి…",
+  mentor_intro:"హాయ్! నేను మీ AI గురువును. రిబ్బన్ ఎందుకు మెరుస్తుంది, బూడిద ఏమిటి, తర్వాత ఏమి చేయాలో అడగండి.",
+  mentor_fallback:"మంచి ప్రశ్న — పూర్తి యాప్‌లో దీన్ని మీ తరగతి స్థాయికి తగినట్టు Claude ఆధారిత వివరణతో సమాధానం ఇస్తాను. ఈ డెమోలో, కింద ఉన్న సూచనలలో ఒకటి ప్రయత్నించండి.",
+  exp_mg_title:"గాలిలో మెగ్నీషియం రిబ్బన్ దహనం", exp_mg_meta:"రసాయన శాస్త్రం · రసాయన చర్యలు",
+  exp_mg_objective:"గాలిలో మెగ్నీషియం రిబ్బన్ దహనాన్ని పరిశీలించి, జరిగే రసాయన చర్య రకాన్ని గుర్తించడం.",
+  exp_mg_app1:"4–5 సెం.మీ మెగ్నీషియం రిబ్బన్ ముక్క", exp_mg_app2:"ఒక జత చిమ్టా (టాంగ్స్)", exp_mg_app3:"ఇసుక కాగితం (ఎమెరీ పేపర్)",
+  exp_mg_app4:"స్పిరిట్ లాంప్ / బర్నర్", exp_mg_app5:"వాచ్ గ్లాస్",
+  exp_mg_proc1:"ఆక్సైడ్ పొరను తొలగించడానికి మెగ్నీషియం రిబ్బన్‌ను ఇసుక కాగితంతో శుభ్రం చేయండి.",
+  exp_mg_proc2:"శుభ్రం చేసిన రిబ్బన్‌ను చిమ్టాతో గట్టిగా పట్టుకోండి.",
+  exp_mg_proc3:"రిబ్బన్‌ను బర్నర్ మంట దగ్గరకు తీసుకురండి.",
+  exp_mg_proc4:"రిబ్బన్ ప్రకాశవంతమైన తెల్లని కాంతితో మండటాన్ని గమనించండి.",
+  exp_mg_proc5:"ఏర్పడిన తెల్లని బూడిదను వాచ్ గ్లాస్‌లో సేకరించండి.",
+  exp_mg_observation:"మెగ్నీషియం రిబ్బన్ ప్రకాశవంతమైన తెల్లని మంటతో మండి, తెల్లని పొడి బూడిదను ఏర్పరుస్తుంది.",
+  exp_mg_conclusion:"మెగ్నీషియం లోహం గాలిలోని ఆక్సిజన్‌తో కలిసి మెగ్నీషియం ఆక్సైడ్‌ను ఏర్పరుస్తుంది. రెండు పదార్థాలు కలిసి ఒకే ఉత్పత్తిని ఏర్పరచడం వల్ల ఇది సంయోగ చర్య — వేడి, కాంతి విడుదలవుతాయి కాబట్టి ఇది ఉష్ణమోచక చర్య కూడా.",
+  step_clean:"ఆక్సైడ్ పొరను తొలగించడానికి ఇసుక కాగితాన్ని, తర్వాత రిబ్బన్‌ను నొక్కండి.",
+  step_pickup:"చిమ్టాను, తర్వాత రిబ్బన్‌ను నొక్కి దాన్ని పైకి తీసుకోండి.",
+  step_ignite:"రిబ్బన్‌ను మండించడానికి బర్నర్ మంట వైపు జరపండి.",
+  step_observe:"చర్యను గమనించండి — మెగ్నీషియం వేగంగా, ప్రకాశవంతంగా మండుతుంది.",
+  step_collect:"ఉత్పత్తిని సేకరించడానికి వాచ్ గ్లాస్‌ను, తర్వాత బూడిదను నొక్కండి.",
+  toast_cleaned:"రిబ్బన్ శుభ్రమైంది ✓", toast_pickedup:"చిమ్టాతో రిబ్బన్ తీసుకోబడింది ✓",
+  toast_burning:"మండించబడింది! తెల్లని మంటను గమనించండి…", toast_collected:"బూడిద సేకరించబడింది ✓ — ఫలితాలు చూడండి",
+  exp_pendulum_title:"సరళ లోలకం — కాలవ్యవధి", exp_acidbase_title:"ఆమ్ల–క్షార తటస్థీకరణ",
+  soon:"త్వరలో",
+  scan_card1:"చిత్రం 4.2 — Mg దహనం", scan_card2:"పాఠం 1 — రసాయన చర్యలు",
+  scan_card3:"చిత్రం 11.3 — సరళ లోలకం", scan_card4:"పాఠం 2 — ఆమ్లాలు & క్షారాలు",
+  scan_toast_match:"సరిపోలిక దొరికింది — ప్రయోగం తెరుస్తోంది…", scan_toast_nomatch:"ఈ పేజీకి ఇంకా AR ప్రయోగం లేదు — సమాచారం చూపిస్తోంది.",
+  q1:"ఇది ఎందుకు అంత ప్రకాశవంతంగా మండుతుంది?", q2:"ఇది ఏ రకమైన చర్య?", q3:"ముందుగా రిబ్బన్‌ను ఎందుకు శుభ్రం చేయాలి?",
+  a1:"మెగ్నీషియం మండేటప్పుడు ఆక్సిజన్‌తో వేగంగా బంధం ఏర్పరచుకుంటూ చాలా శక్తిని విడుదల చేస్తుంది; ఆ శక్తిలో ఎక్కువ భాగం తీవ్రమైన వెలుతురుగా బయటకు వస్తుంది — అదే మీరు చూసే తెల్లని మెరుపు.",
+  a2:"ఇది సంయోగ చర్య: రెండు పదార్థాలు (మెగ్నీషియం, ఆక్సిజన్) కలిసి ఒకే ఉత్పత్తి మెగ్నీషియం ఆక్సైడ్‌ను ఏర్పరుస్తాయి. 2Mg + O2 → 2MgO. ఇది ఉష్ణమోచక మరియు ఆక్సీకరణ చర్య కూడా.",
+  a3:"గది ఉష్ణోగ్రత వద్ద కూడా మెగ్నీషియం గాలితో నెమ్మదిగా చర్య జరిపి, ఉపరితలంపై సన్నని ఆక్సైడ్ పొరను ఏర్పరుస్తుంది. దాన్ని ఇసుక కాగితంతో తీసివేయడం వల్ల స్వచ్ఛమైన లోహం బయటపడి, మీరు గమనించే చర్య సరిగ్గా జరుగుతుంది.",
+  progress_none:"ఇంకా ఏ ప్రయోగం ప్రయత్నించలేదు — పైన ఉన్నదాన్ని ప్రయత్నించండి!",
+  attempt_label:"ప్రయత్నించారు", complete_label:"పూర్తయింది",
+  free_burner:"బర్నర్", free_tongs:"చిమ్టా", free_ribbon:"Mg రిబ్బన్", free_beaker:"బీకర్", free_watchglass:"వాచ్ గ్లాస్", free_testtube:"పరీక్ష నాళిక",
+  place_placed:"బల్ల ఉంచబడింది — ప్రయోగానికి మారుతోంది…",
+  ar_unsupported:"ఈ ప్రివ్యూ విండోలో పరికర AR అందుబాటులో లేదు — ఈ అనుకరణ దృశ్యం దానికి ప్రత్యామ్నాయం.",
+  ar_checking:"AR మద్దతు కోసం తనిఖీ చేస్తోంది…"
+}
+};
+let LANG = "en";
+function t(key){ return (I18N[LANG] && I18N[LANG][key]) || I18N.en[key] || key; }
+function applyI18n(){
+  document.querySelectorAll("[data-t]").forEach(el=>{ el.textContent = t(el.getAttribute("data-t")); });
+  document.querySelectorAll("[data-t-ph]").forEach(el=>{ el.placeholder = t(el.getAttribute("data-t-ph")); });
+  document.getElementById("lang-toggle").textContent = LANG==="en" ? "EN" : "తె";
+  renderHome(); renderInfo(); renderStepBanner(); renderFreeTray(); renderScanGrid(); renderProgress();
+}
+
+/* ---------------------------------------------------------------------- */
+/*  Experiment data model                                                  */
+/* ---------------------------------------------------------------------- */
+const EXPERIMENTS = [
+  { id:"mg-ribbon", subject:"chemistry", available:true, titleKey:"exp_mg_title", metaKey:"exp_mg_meta",
+    objectiveKey:"exp_mg_objective",
+    apparatusKeys:["exp_mg_app1","exp_mg_app2","exp_mg_app3","exp_mg_app4","exp_mg_app5"],
+    procedureKeys:["exp_mg_proc1","exp_mg_proc2","exp_mg_proc3","exp_mg_proc4","exp_mg_proc5"],
+    observationKey:"exp_mg_observation", conclusionKey:"exp_mg_conclusion", equation:"2 Mg  +  O₂  →  2 MgO",
+    steps:[
+      {textKey:"step_clean", need:["sandpaper","ribbon"], toastKey:"toast_cleaned"},
+      {textKey:"step_pickup", need:["tongs","ribbon"], toastKey:"toast_pickedup"},
+      {textKey:"step_ignite", need:["ribbon","burner"], toastKey:"toast_burning"},
+      {textKey:"step_observe", need:["burner","burner"], toastKey:"toast_burning", auto:true},
+      {textKey:"step_collect", need:["watchglass","ribbon"], toastKey:"toast_collected"}
+    ]
+  },
+  { id:"pendulum", subject:"physics", available:false, titleKey:"exp_pendulum_title" },
+  { id:"acid-base", subject:"chemistry", available:false, titleKey:"exp_acidbase_title" }
+];
+const MENTOR_QA = [
+  { qKey:"q1", aKey:"a1", kw:["bright","white","light","glow","flame","ప్రకాశ","మెరుప్"] },
+  { qKey:"q2", aKey:"a2", kw:["type","reaction","combination","చర్య","రకం"] },
+  { qKey:"q3", aKey:"a3", kw:["clean","sandpaper","oxide","శుభ్రం","ఇసుక"] }
+];
+
+let selectedSubject = "chemistry";
+let currentExpId = "mg-ribbon";
+let stepIndex = 0;
+let progressData = { attempted:{}, completed:{} };
+try{
+  const saved = JSON.parse(localStorage.getItem("eduar_progress")||"null");
+  if(saved) progressData = saved;
+}catch(e){}
+function saveProgress(){ try{ localStorage.setItem("eduar_progress", JSON.stringify(progressData)); }catch(e){} }
+function markAttempted(id){ progressData.attempted[id]=true; saveProgress(); renderProgress(); }
+function markCompleted(id){ progressData.completed[id]=true; saveProgress(); renderProgress(); }
+
+/* ---------------------------------------------------------------------- */
+/*  Navigation                                                             */
+/* ---------------------------------------------------------------------- */
+function showScreen(id){
+  document.querySelectorAll(".screen").forEach(s=>s.hidden = (s.id!==id));
+  document.querySelectorAll("#bottomnav button").forEach(b=>{
+    b.classList.toggle("active", b.dataset.nav===id);
+  });
+  window.scrollTo(0,0);
+}
+document.querySelectorAll("#bottomnav button[data-nav]").forEach(b=>{
+  b.addEventListener("click", ()=>{
+    showScreen(b.dataset.nav);
+    if(b.dataset.nav==="screen-free") initFreeScene();
+  });
+});
+document.querySelectorAll("[data-back]").forEach(b=>{
+  b.addEventListener("click", ()=>showScreen(b.dataset.back));
+});
+document.getElementById("go-free").addEventListener("click", ()=>{ showScreen("screen-free"); initFreeScene(); document.querySelector('#bottomnav button[data-nav="screen-free"]').classList.add("active"); document.querySelector('#bottomnav button[data-nav="screen-home"]').classList.remove("active");});
+document.getElementById("go-scan").addEventListener("click", ()=>{ showScreen("screen-scan"); document.querySelector('#bottomnav button[data-nav="screen-scan"]').classList.add("active"); document.querySelector('#bottomnav button[data-nav="screen-home"]').classList.remove("active");});
+
+/* ---------------------------------------------------------------------- */
+/*  Home screen                                                            */
+/* ---------------------------------------------------------------------- */
+function renderHome(){
+  const grid = document.getElementById("subject-grid");
+  grid.innerHTML = "";
+  [["chemistry","🧪","subj_chem","subj_chem_sub"],["physics","⚙️","subj_phys","subj_phys_sub"]].forEach(([id,icon,labelKey,subKey])=>{
+    const b = document.createElement("button");
+    b.className = "tile" + (selectedSubject===id ? " selected":"");
+    b.innerHTML = `<div class="t-icon">${icon}</div><div class="t-label">${t(labelKey)}</div><div class="t-sub">${t(subKey)}</div>`;
+    b.addEventListener("click", ()=>{ selectedSubject=id; renderHome(); });
+    grid.appendChild(b);
+  });
+
+  const list = document.getElementById("exp-list");
+  list.innerHTML = "";
+  const subjectExps = EXPERIMENTS.filter(e=>e.subject===selectedSubject);
+  const availCount = EXPERIMENTS.filter(e=>e.available).length;
+  document.getElementById("exp-count-badge").textContent = availCount + " / " + EXPERIMENTS.length;
+  subjectExps.forEach(exp=>{
+    const row = document.createElement("button");
+    row.className = "exp-row" + (exp.available ? "" : " disabled");
+    row.innerHTML = `
+      <div class="swatch">${exp.subject==="chemistry"?"🔥":"🕰️"}</div>
+      <div class="body">
+        <div class="name">${t(exp.titleKey)}</div>
+        <div class="meta">${exp.available ? t(exp.metaKey||"") : t("soon")}</div>
+      </div>
+      ${exp.available ? '<span class="badge new">'+ (LANG==="en"?"Ready":"సిద్ధం") +'</span>' : '<span class="badge">'+t("soon")+'</span>'}
+    `;
+    if(exp.available){
+      row.addEventListener("click", ()=>{ currentExpId = exp.id; showExperimentInfo(exp.id); });
+    }
+    list.appendChild(row);
+  });
+}
+
+/* ---------------------------------------------------------------------- */
+/*  Experiment info screen                                                 */
+/* ---------------------------------------------------------------------- */
+let infoTab = "objective";
+function showExperimentInfo(id){
+  currentExpId = id;
+  infoTab = "objective";
+  renderInfo();
+  showScreen("screen-info");
+}
+function renderInfo(){
+  const exp = EXPERIMENTS.find(e=>e.id===currentExpId);
+  if(!exp || !exp.available) return;
+  document.getElementById("info-title").textContent = t(exp.titleKey);
+  document.getElementById("obj-text").textContent = t(exp.objectiveKey);
+
+  const app = document.getElementById("tab-apparatus");
+  app.innerHTML = exp.apparatusKeys.map((k,i)=>`<div class="list-item"><span class="num">${i+1}</span><span>${t(k)}</span></div>`).join("");
+
+  const proc = document.getElementById("tab-procedure");
+  proc.innerHTML = exp.procedureKeys.map((k,i)=>`<div class="list-item"><span class="num">${i+1}</span><span>${t(k)}</span></div>`).join("");
+
+  document.querySelectorAll("#info-tabs button").forEach(b=>b.classList.toggle("active", b.dataset.tab===infoTab));
+  ["objective","apparatus","procedure"].forEach(tab=>{
+    document.getElementById("tab-"+tab).hidden = (tab!==infoTab);
+  });
+}
+document.querySelectorAll("#info-tabs button").forEach(b=>{
+  b.addEventListener("click", ()=>{ infoTab = b.dataset.tab; renderInfo(); });
+});
+document.getElementById("start-placement").addEventListener("click", ()=>{
+  showScreen("screen-placement");
+  startPlacementFlow();
+});
+
+/* ---------------------------------------------------------------------- */
+/*  three.js helpers                                                       */
+/* ---------------------------------------------------------------------- */
+function makeSpriteTexture(){
+  const c = document.createElement("canvas"); c.width=64; c.height=64;
+  const ctx = c.getContext("2d");
+  const g = ctx.createRadialGradient(32,32,0,32,32,32);
+  g.addColorStop(0,"rgba(255,255,255,1)"); g.addColorStop(0.4,"rgba(255,230,180,.8)"); g.addColorStop(1,"rgba(255,230,180,0)");
+  ctx.fillStyle = g; ctx.fillRect(0,0,64,64);
+  return new THREE.CanvasTexture(c);
+}
+const SPRITE_TEX = (typeof THREE!=="undefined") ? makeSpriteTexture() : null;
+
+function buildBench(){
+  const group = new THREE.Group();
+  const top = new THREE.Mesh(new THREE.BoxGeometry(2.6,0.09,1.2), new THREE.MeshStandardMaterial({color:0x8a6a4a, roughness:.75}));
+  top.position.y = 0.62; group.add(top);
+  const legGeo = new THREE.CylinderGeometry(0.05,0.05,0.6,10);
+  const legMat = new THREE.MeshStandardMaterial({color:0x4a3a2a, roughness:.8});
+  [[-1.15,-0.5],[1.15,-0.5],[-1.15,0.5],[1.15,0.5]].forEach(([x,z])=>{
+    const leg = new THREE.Mesh(legGeo, legMat); leg.position.set(x,0.3,z); group.add(leg);
+  });
+  return group;
+}
+
+function buildBurner(){
+  const g = new THREE.Group(); g.name="burner";
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.13,0.15,0.06,16), new THREE.MeshStandardMaterial({color:0x2b2f33, metalness:.6, roughness:.4}));
+  base.position.y = 0.03; g.add(base);
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.055,0.07,0.28,14), new THREE.MeshStandardMaterial({color:0x3c4a52, metalness:.7, roughness:.3}));
+  body.position.y = 0.2; g.add(body);
+  const flameGroup = new THREE.Group(); flameGroup.position.y = 0.36; flameGroup.name="flame";
+  const flameCore = new THREE.Mesh(new THREE.ConeGeometry(0.05,0.22,10), new THREE.MeshBasicMaterial({color:0xfff3c4, transparent:true, opacity:.95}));
+  flameCore.position.y = 0.11; flameGroup.add(flameCore);
+  const flameOuter = new THREE.Mesh(new THREE.ConeGeometry(0.075,0.3,10), new THREE.MeshBasicMaterial({color:0xff8a3d, transparent:true, opacity:.55}));
+  flameOuter.position.y = 0.13; flameGroup.add(flameOuter);
+  const light = new THREE.PointLight(0xffb066, 0.9, 2.2); light.position.y = 0.2; flameGroup.add(light);
+  g.add(flameGroup);
+  g.userData.flameGroup = flameGroup;
+  return g;
+}
+
+function buildTongs(){
+  const g = new THREE.Group(); g.name="tongs";
+  const mat = new THREE.MeshStandardMaterial({color:0x9aa3ab, metalness:.7, roughness:.35});
+  const a = new THREE.Mesh(new THREE.BoxGeometry(0.5,0.025,0.03), mat); a.position.set(0,0.02,0.02); a.rotation.z=0.05; g.add(a);
+  const b = new THREE.Mesh(new THREE.BoxGeometry(0.5,0.025,0.03), mat); b.position.set(0,-0.02,-0.02); b.rotation.z=-0.05; g.add(b);
+  return g;
+}
+function buildSandpaper(){
+  const m = new THREE.Mesh(new THREE.BoxGeometry(0.22,0.015,0.16), new THREE.MeshStandardMaterial({color:0xc9a15a, roughness:1}));
+  m.name = "sandpaper"; return m;
+}
+function buildRibbon(){
+  const g = new THREE.Group(); g.name="ribbon";
+  const strip = new THREE.Mesh(new THREE.BoxGeometry(0.5,0.01,0.045), new THREE.MeshStandardMaterial({color:0xb9bfc2, metalness:.55, roughness:.5, emissive:0x000000}));
+  strip.name="ribbonStrip"; g.add(strip);
+  return g;
+}
+function buildWatchGlass(){
+  const g = new THREE.Group(); g.name="watchglass";
+  const glass = new THREE.Mesh(new THREE.SphereGeometry(0.16,20,10,0,Math.PI*2,0,Math.PI/2.4), new THREE.MeshPhysicalMaterial({color:0xdfeee8, transparent:true, opacity:.35, roughness:.15, metalness:0, side:THREE.DoubleSide}));
+  glass.rotation.x = Math.PI; g.add(glass);
+  return g;
+}
+function buildBeaker(){
+  const g = new THREE.Group(); g.name="beaker";
+  const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.11,0.09,0.22,16,1,true), new THREE.MeshPhysicalMaterial({color:0xcfe8de, transparent:true, opacity:.35, roughness:.1, side:THREE.DoubleSide}));
+  glass.position.y=0.11; g.add(glass);
+  const bottom = new THREE.Mesh(new THREE.CircleGeometry(0.09,16), new THREE.MeshPhysicalMaterial({color:0xcfe8de, transparent:true, opacity:.35}));
+  bottom.rotation.x=-Math.PI/2; bottom.position.y=0.001; g.add(bottom);
+  return g;
+}
+function buildTestTube(){
+  const g = new THREE.Group(); g.name="testtube";
+  const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.035,0.035,0.26,14,1,true), new THREE.MeshPhysicalMaterial({color:0xcfe8de, transparent:true, opacity:.35, side:THREE.DoubleSide}));
+  tube.position.y=0.13; g.add(tube);
+  const cap = new THREE.Mesh(new THREE.SphereGeometry(0.035,14,10,0,Math.PI*2,Math.PI/2,Math.PI/2), new THREE.MeshPhysicalMaterial({color:0xcfe8de, transparent:true, opacity:.35}));
+  cap.position.y=0.001; g.add(cap);
+  return g;
+}
+function makeAshPile(){
+  const g = new THREE.Mesh(new THREE.SphereGeometry(0.055,10,6), new THREE.MeshStandardMaterial({color:0xf3f3ef, roughness:1}));
+  g.scale.y = 0.35; g.name = "ash";
+  return g;
+}
+
+/* Simple orbit camera controller */
+function attachOrbitControls(canvas, camera, target){
+  let dragging=false, lastX=0, lastY=0;
+  let theta = 0.85, phi = 1.05, radius = 2.6;
+  function update(){
+    camera.position.set(
+      target.x + radius*Math.sin(phi)*Math.sin(theta),
+      target.y + radius*Math.cos(phi),
+      target.z + radius*Math.sin(phi)*Math.cos(theta)
+    );
+    camera.lookAt(target);
+  }
+  update();
+  canvas.addEventListener("pointerdown", e=>{ if(e.target.dataset.noOrbit) return; dragging=true; lastX=e.clientX; lastY=e.clientY; });
+  window.addEventListener("pointerup", ()=>dragging=false);
+  window.addEventListener("pointermove", e=>{
+    if(!dragging) return;
+    const dx = e.clientX-lastX, dy = e.clientY-lastY;
+    lastX=e.clientX; lastY=e.clientY;
+    theta -= dx*0.01; phi = Math.min(1.45, Math.max(0.35, phi - dy*0.01));
+    update();
+  });
+  canvas.addEventListener("wheel", e=>{ e.preventDefault(); radius = Math.min(5, Math.max(1.4, radius + e.deltaY*0.002)); update(); }, {passive:false});
+  return {update, setRadius:(r)=>{radius=r; update();}};
+}
+
+/* ---------------------------------------------------------------------- */
+/*  Placement (AR) scene                                                   */
+/* ---------------------------------------------------------------------- */
+let placementScene=null, placementDone=false;
+function startPlacementFlow(){
+  placementDone = false;
+  document.getElementById("scan-overlay").hidden = false;
+  document.getElementById("ar-tag").hidden = true;
+  document.getElementById("place-hint").hidden = true;
+
+  const wrap = document.getElementById("vp-placement");
+  let canvas = wrap.querySelector("canvas");
+  if(!canvas){
+    const renderer = new THREE.WebGLRenderer({antialias:true, alpha:false});
+    canvas = renderer.domElement; wrap.insertBefore(canvas, wrap.firstChild);
+    const scene = new THREE.Scene(); scene.background = new THREE.Color(0x0b1a13);
+    const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 50);
+    scene.add(new THREE.AmbientLight(0xffffff,0.55));
+    const dl = new THREE.DirectionalLight(0xffffff,0.8); dl.position.set(2,4,2); scene.add(dl);
+
+    const grid = new THREE.GridHelper(6,24,0x3fbe8e,0x1c3a2c); scene.add(grid);
+    const floorMat = new THREE.MeshStandardMaterial({color:0x0f2018, roughness:1});
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(6,6), floorMat); floor.rotation.x=-Math.PI/2; floor.position.y=-0.001; scene.add(floor);
+
+    const reticle = new THREE.Mesh(new THREE.RingGeometry(0.18,0.24,32), new THREE.MeshBasicMaterial({color:0x3fbe8e, side:THREE.DoubleSide}));
+    reticle.rotation.x=-Math.PI/2; reticle.visible=false; scene.add(reticle);
+
+    const ray = new THREE.Raycaster();
+    const controls = attachOrbitControls(canvas, camera, new THREE.Vector3(0,0.3,0));
+
+    function resize(){
+      const w = wrap.clientWidth, h = wrap.clientHeight;
+      renderer.setSize(w,h,false); camera.aspect = w/h; camera.updateProjectionMatrix();
+    }
+    new ResizeObserver(resize).observe(wrap);
+    resize();
+
+    function pointerToGround(e){
+      const rect = canvas.getBoundingClientRect();
+      const mx = ((e.clientX-rect.left)/rect.width)*2-1;
+      const my = -((e.clientY-rect.top)/rect.height)*2+1;
+      ray.setFromCamera(new THREE.Vector2(mx,my), camera);
+      const pt = new THREE.Vector3();
+      ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,1,0),0), pt);
+      return pt;
+    }
+
+    canvas.addEventListener("pointermove", e=>{
+      if(placementDone || placementScene.scanning) return;
+      const pt = pointerToGround(e);
+      if(pt){ reticle.visible=true; reticle.position.set(pt.x,0.002,pt.z); }
+    });
+    canvas.addEventListener("click", e=>{
+      if(placementDone || placementScene.scanning) return;
+      const pt = pointerToGround(e);
+      if(!pt) return;
+      placeBenchAt(scene, pt);
+    });
+
+    let raf;
+    function animate(){
+      raf = requestAnimationFrame(animate);
+      const time = performance.now()*0.001;
+      scene.traverse(o=>{ if(o.name==="flame"){ o.scale.y = 1 + Math.sin(time*14)*0.08; o.children[0].rotation.y += 0.05; } });
+      renderer.render(scene,camera);
+    }
+    animate();
+
+    placementScene = {scene, camera, renderer, controls, scanning:true};
+  }
+
+  placementScene.scanning = true;
+  setTimeout(()=>{
+    if(!placementScene) return;
+    placementScene.scanning = false;
+    document.getElementById("scan-overlay").hidden = true;
+    document.getElementById("ar-tag").hidden = false;
+    document.getElementById("place-hint").hidden = false;
+  }, 1400);
+}
+
+function placeBenchAt(scene, pt){
+  placementDone = true;
+  document.getElementById("place-hint").hidden = true;
+  const bench = buildBench();
+  bench.position.copy(pt); bench.scale.set(0.001,0.001,0.001);
+  scene.add(bench);
+  let s=0.001;
+  function grow(){
+    s = Math.min(0.62, s+0.045);
+    bench.scale.set(s,s,s);
+    if(s<0.62) requestAnimationFrame(grow);
+    else setTimeout(()=>transitionToExperiment(), 350);
+  }
+  grow();
+}
+
+function transitionToExperiment(){
+  markAttempted(currentExpId);
+  stepIndex = 0;
+  showScreen("screen-experiment");
+  initExperimentScene();
+}
+
+document.getElementById("try-real-ar").addEventListener("click", async ()=>{
+  const note = document.getElementById("ar-note");
+  if(navigator.xr && navigator.xr.isSessionSupported){
+    note.textContent = t("ar_checking");
+    try{
+      const ok = await navigator.xr.isSessionSupported("immersive-ar");
+      note.textContent = ok ? "Device AR session supported — full flow ships in the native app." : t("ar_unsupported");
+    }catch(e){ note.textContent = t("ar_unsupported"); }
+  } else {
+    note.textContent = t("ar_unsupported");
+  }
+});
+
+/* ---------------------------------------------------------------------- */
+/*  Experiment scene (guided steps)                                        */
+/* ---------------------------------------------------------------------- */
+let expScene=null;
+let heldObject=null;
+let expParts={};
+function initExperimentScene(){
+  const wrap = document.getElementById("vp-experiment");
+  wrap.innerHTML = "";
+  const renderer = new THREE.WebGLRenderer({antialias:true});
+  const canvas = renderer.domElement; wrap.appendChild(canvas);
+  const scene = new THREE.Scene(); scene.background = new THREE.Color(0x122019);
+  const camera = new THREE.PerspectiveCamera(42,1,0.1,50);
+  scene.add(new THREE.AmbientLight(0xffffff,0.65));
+  const dl = new THREE.DirectionalLight(0xffffff,0.85); dl.position.set(2,4,3); scene.add(dl);
+
+  const bench = buildBench(); scene.add(bench);
+
+  const burner = buildBurner(); burner.position.set(0.65,0.62,0); scene.add(burner);
+  const tongs = buildTongs(); tongs.position.set(-0.7,0.72,0.2); scene.add(tongs);
+  const sandpaper = buildSandpaper(); sandpaper.position.set(-0.25,0.665,0.35); scene.add(sandpaper);
+  const ribbon = buildRibbon(); ribbon.position.set(-0.25,0.665,0); scene.add(ribbon);
+  const watchglass = buildWatchGlass(); watchglass.position.set(0.2,0.62,-0.35); scene.add(watchglass);
+
+  expParts = {burner, tongs, sandpaper, ribbon, watchglass};
+  window.__eduarParts = expParts;
+
+  const controls = attachOrbitControls(canvas, camera, new THREE.Vector3(0,0.72,0));
+  controls.setRadius(2.7);
+
+  function resize(){ const w=wrap.clientWidth,h=wrap.clientHeight; renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix(); }
+  new ResizeObserver(resize).observe(wrap); resize();
+
+  const ray = new THREE.Raycaster();
+  canvas.addEventListener("click", e=>{
+    const rect = canvas.getBoundingClientRect();
+    const mx = ((e.clientX-rect.left)/rect.width)*2-1;
+    const my = -((e.clientY-rect.top)/rect.height)*2+1;
+    ray.setFromCamera(new THREE.Vector2(mx,my), camera);
+    const objs = [burner,tongs,sandpaper,ribbon,watchglass];
+    const hit = ray.intersectObjects(objs, true)[0];
+    if(hit){
+      let root = hit.object; while(root.parent && root.parent!==scene) root = root.parent;
+      handleExperimentTap(root.name);
+    }
+  });
+
+  let raf;
+  let cleaned=false, held=false, burning=false, burnT=0, ashMade=false;
+  function animate(){
+    raf = requestAnimationFrame(animate);
+    const time = performance.now()*0.001;
+    const flameGroup = burner.userData.flameGroup;
+    flameGroup.scale.y = 1 + Math.sin(time*14)*0.08;
+    flameGroup.children[0].rotation.y += 0.05;
+    flameGroup.visible = stepIndex>=2;
+
+    if(held && !burning){
+      ribbon.position.set(tongs.position.x+0.06, tongs.position.y+0.02, tongs.position.z);
+    }
+    if(burning){
+      burnT += 0.016;
+      const strip = ribbon.children[0];
+      strip.material.emissive = new THREE.Color(0xffffff);
+      strip.material.emissiveIntensity = Math.min(2.4, burnT*3);
+      strip.material.color.set(0xffffff);
+      const s = Math.max(0.05, 1-burnT*0.55);
+      ribbon.scale.set(1,1,s);
+      ribbon.position.set(tongs.position.x+0.06, tongs.position.y+0.02 - (1-s)*0.01, tongs.position.z);
+      if(burnT>1.9 && !ashMade){
+        ashMade = true;
+        ribbon.visible = false;
+        const ash = makeAshPile();
+        ash.position.set(watchglass.position.x, watchglass.position.y+0.045, watchglass.position.z);
+        ash.name = "ash";
+        scene.add(ash);
+        expParts.ash = ash;
+        burning = false;
+        advanceStepAuto();
+      }
+    }
+    renderer.render(scene,camera);
+  }
+  animate();
+
+  expScene = {scene, camera, renderer, animId:raf, setCleaned:(v)=>cleaned=v, setHeld:(v)=>held=v, setBurning:(v)=>burning=v};
+}
+
+function toast(msg){
+  let el = document.getElementById("toast-el");
+  if(!el){
+    el = document.createElement("div"); el.id="toast-el";
+    el.style.cssText = "position:absolute; left:50%; bottom:90px; transform:translateX(-50%); background:rgba(18,32,25,.92); color:#fff; padding:9px 16px; border-radius:100px; font-size:12.5px; font-weight:700; z-index:20; pointer-events:none; transition:opacity .3s;";
+    document.getElementById("phone").appendChild(el);
+  }
+  el.textContent = msg; el.style.opacity = "1";
+  clearTimeout(el._h); el._h = setTimeout(()=>{ el.style.opacity="0"; }, 1600);
+}
+
+let tapBuffer = [];
+function handleExperimentTap(name){
+  const exp = EXPERIMENTS.find(e=>e.id===currentExpId);
+  if(stepIndex>=exp.steps.length) return;
+  const step = exp.steps[stepIndex];
+  if(step.auto) return;
+  tapBuffer.push(name);
+  if(tapBuffer.length>2) tapBuffer.shift();
+  const need = step.need;
+  const matches = need.every(n=>tapBuffer.includes(n)) || (tapBuffer.length>=2 && tapBuffer[0]===need[0] && tapBuffer[1]===need[1]);
+  if(matches){
+    tapBuffer = [];
+    completeStep(step);
+  }
+}
+function completeStep(step){
+  toast(t(step.toastKey));
+  if(stepIndex===1){ expScene.setHeld(true); }
+  if(stepIndex===2){ expScene.setBurning(true); }
+  advanceStepAuto();
+}
+function advanceStepAuto(){
+  stepIndex++;
+  const exp = EXPERIMENTS.find(e=>e.id===currentExpId);
+  if(stepIndex>=exp.steps.length){
+    markCompleted(currentExpId);
+    setTimeout(()=>showResult(exp), 500);
+    return;
+  }
+  renderStepBanner();
+  const next = exp.steps[stepIndex];
+  if(next && next.auto){ setTimeout(advanceStepAuto, 50); }
+}
+function renderStepBanner(){
+  const exp = EXPERIMENTS.find(e=>e.id===currentExpId);
+  if(!exp || !exp.available) return;
+  const dotsWrap = document.getElementById("step-dots");
+  dotsWrap.innerHTML = exp.steps.map((s,i)=>`<i class="${i<stepIndex?'done':(i===stepIndex?'now':'')}"></i>`).join("");
+  const idx = Math.min(stepIndex, exp.steps.length-1);
+  document.getElementById("step-no").textContent = Math.min(stepIndex+1, exp.steps.length);
+  document.getElementById("step-text").textContent = t(exp.steps[idx].textKey);
+
+  document.getElementById("ref-objective").textContent = t(exp.objectiveKey);
+  document.getElementById("ref-procedure").innerHTML = exp.procedureKeys.map((k,i)=>`<div class="list-item"><span class="num">${i+1}</span><span>${t(k)}</span></div>`).join("");
+}
+document.getElementById("exp-info-toggle").addEventListener("click", ()=>{
+  const el = document.getElementById("exp-reference");
+  el.hidden = !el.hidden;
+});
+
+function showResult(exp){
+  document.getElementById("result-observation").textContent = t(exp.observationKey);
+  document.getElementById("result-equation").textContent = exp.equation;
+  document.getElementById("result-conclusion-text").textContent = t(exp.conclusionKey);
+  showScreen("screen-result");
+}
+document.getElementById("done-experiment").addEventListener("click", ()=>showScreen("screen-home"));
+document.getElementById("ask-mentor-from-result").addEventListener("click", ()=>openMentor());
+
+/* ---------------------------------------------------------------------- */
+/*  Free experiment mode                                                   */
+/* ---------------------------------------------------------------------- */
+const FREE_ITEMS = [
+  {id:"burner", icon:"🔥", labelKey:"free_burner", build:buildBurner, y:0.62},
+  {id:"tongs", icon:"🥢", labelKey:"free_tongs", build:buildTongs, y:0.72},
+  {id:"ribbon", icon:"➖", labelKey:"free_ribbon", build:buildRibbon, y:0.665},
+  {id:"beaker", icon:"🧪", labelKey:"free_beaker", build:buildBeaker, y:0.62},
+  {id:"watchglass", icon:"🍽️", labelKey:"free_watchglass", build:buildWatchGlass, y:0.62},
+  {id:"testtube", icon:"🧫", labelKey:"free_testtube", build:buildTestTube, y:0.62}
+];
+function renderFreeTray(){
+  const tray = document.getElementById("free-tray");
+  tray.innerHTML = "";
+  FREE_ITEMS.forEach(item=>{
+    const b = document.createElement("button");
+    b.className = "tray-item"; b.dataset.item = item.id;
+    b.innerHTML = `<div class="ic">${item.icon}</div><div>${t(item.labelKey)}</div>`;
+    b.addEventListener("click", ()=>spawnFreeItem(item));
+    tray.appendChild(b);
+  });
+}
+let freeScene=null;
+function initFreeScene(){
+  if(freeScene) return;
+  const wrap = document.getElementById("vp-free");
+  const renderer = new THREE.WebGLRenderer({antialias:true});
+  const canvas = renderer.domElement; wrap.appendChild(canvas);
+  const scene = new THREE.Scene(); scene.background = new THREE.Color(0x122019);
+  const camera = new THREE.PerspectiveCamera(42,1,0.1,50);
+  scene.add(new THREE.AmbientLight(0xffffff,0.65));
+  const dl = new THREE.DirectionalLight(0xffffff,0.85); dl.position.set(2,4,3); scene.add(dl);
+  const bench = buildBench(); scene.add(bench);
+
+  const controls = attachOrbitControls(canvas, camera, new THREE.Vector3(0,0.72,0));
+  controls.setRadius(2.8);
+  function resize(){ const w=wrap.clientWidth,h=wrap.clientHeight; renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix(); }
+  new ResizeObserver(resize).observe(wrap); resize();
+
+  const ray = new THREE.Raycaster();
+  let dragTarget=null;
+  const spawned=[];
+  canvas.addEventListener("pointerdown", e=>{
+    const rect = canvas.getBoundingClientRect();
+    const mx = ((e.clientX-rect.left)/rect.width)*2-1, my=-((e.clientY-rect.top)/rect.height)*2+1;
+    ray.setFromCamera(new THREE.Vector2(mx,my), camera);
+    const hit = ray.intersectObjects(spawned, true)[0];
+    if(hit){ let root=hit.object; while(root.parent && root.parent!==scene) root=root.parent; dragTarget=root; e.stopPropagation();
+      canvas.setPointerCapture(e.pointerId);
+    }
+  });
+  canvas.addEventListener("pointermove", e=>{
+    if(!dragTarget) return;
+    const rect = canvas.getBoundingClientRect();
+    const mx = ((e.clientX-rect.left)/rect.width)*2-1, my=-((e.clientY-rect.top)/rect.height)*2+1;
+    ray.setFromCamera(new THREE.Vector2(mx,my), camera);
+    const pt = new THREE.Vector3();
+    ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,1,0),-0.62), pt);
+    if(pt){ dragTarget.position.x = Math.max(-1.1,Math.min(1.1,pt.x)); dragTarget.position.z = Math.max(-0.5,Math.min(0.5,pt.z)); }
+  });
+  window.addEventListener("pointerup", ()=>dragTarget=null);
+
+  function animate(){
+    requestAnimationFrame(animate);
+    const time = performance.now()*0.001;
+    scene.traverse(o=>{ if(o.name==="flame"){ o.scale.y = 1+Math.sin(time*14)*0.08; }});
+    renderer.render(scene,camera);
+  }
+  animate();
+
+  freeScene = {scene, camera, spawned};
+}
+let freeSpawnOffset = 0;
+function spawnFreeItem(item){
+  if(!freeScene) return;
+  const obj = item.build();
+  obj.position.set(-0.9 + (freeSpawnOffset%5)*0.4, item.y, -0.3 + Math.floor(freeSpawnOffset/5)*0.3);
+  freeSpawnOffset++;
+  freeScene.scene.add(obj);
+  freeScene.spawned.push(obj);
+}
+
+/* ---------------------------------------------------------------------- */
+/*  Scan textbook (mock recognition)                                       */
+/* ---------------------------------------------------------------------- */
+const SCAN_CARDS = [
+  {icon:"🔥", capKey:"scan_card1", target:{type:"exp", id:"mg-ribbon"}},
+  {icon:"📖", capKey:"scan_card2", target:{type:"info", id:"mg-ribbon"}},
+  {icon:"🕰️", capKey:"scan_card3", target:{type:"exp", id:"pendulum"}},
+  {icon:"⚗️", capKey:"scan_card4", target:{type:"exp", id:"acid-base"}}
+];
+function renderScanGrid(){
+  const grid = document.getElementById("scan-grid");
+  grid.innerHTML = "";
+  SCAN_CARDS.forEach(card=>{
+    const b = document.createElement("button");
+    b.className = "scan-card";
+    b.innerHTML = `<div class="thumb" style="background:var(--surface-3);">${card.icon}</div><div class="cap">${t(card.capKey)}</div>`;
+    b.addEventListener("click", ()=>{
+      const exp = EXPERIMENTS.find(e=>e.id===card.target.id);
+      if(exp && exp.available){
+        toast(t("scan_toast_match"));
+        setTimeout(()=>{ card.target.type==="exp" ? showExperimentInfo(exp.id) : showExperimentInfo(exp.id); }, 500);
+      } else {
+        toast(t("scan_toast_nomatch"));
+      }
+    });
+    grid.appendChild(b);
+  });
+}
+
+/* ---------------------------------------------------------------------- */
+/*  Progress                                                                */
+/* ---------------------------------------------------------------------- */
+function renderProgress(){
+  const attempted = Object.keys(progressData.attempted).length;
+  const completed = Object.keys(progressData.completed).length;
+  document.getElementById("stat-attempted").textContent = attempted;
+  document.getElementById("stat-completed").textContent = completed;
+  const list = document.getElementById("progress-list");
+  list.innerHTML = "";
+  if(attempted===0){
+    list.innerHTML = `<p class="sub">${t("progress_none")}</p>`;
+    return;
+  }
+  EXPERIMENTS.filter(e=>progressData.attempted[e.id]).forEach(e=>{
+    const done = !!progressData.completed[e.id];
+    const row = document.createElement("div");
+    row.className = "exp-row";
+    row.innerHTML = `<div class="swatch">${e.subject==="chemistry"?"🔥":"🕰️"}</div>
+      <div class="body"><div class="name">${t(e.titleKey)}</div><div class="meta">${done? t("complete_label") : t("attempt_label")}</div></div>
+      <span class="badge ${done?'new':''}">${done?"✓":"…"}</span>`;
+    list.appendChild(row);
+  });
+}
+
+/* ---------------------------------------------------------------------- */
+/*  AI mentor                                                               */
+/* ---------------------------------------------------------------------- */
+function openMentor(){
+  const panel = document.getElementById("mentor-panel");
+  panel.hidden = false;
+  const log = document.getElementById("mentor-log");
+  if(!log.dataset.inited){
+    log.dataset.inited = "1";
+    addMentorMsg(t("mentor_intro"), "bot");
+  }
+  renderMentorSuggestions();
+}
+document.getElementById("mentor-fab").addEventListener("click", openMentor);
+document.getElementById("mentor-close").addEventListener("click", ()=>{ document.getElementById("mentor-panel").hidden = true; });
+function addMentorMsg(text, who){
+  const log = document.getElementById("mentor-log");
+  const div = document.createElement("div");
+  div.className = "msg " + who; div.textContent = text;
+  log.appendChild(div); log.scrollTop = log.scrollHeight;
+}
+function renderMentorSuggestions(){
+  const row = document.getElementById("mentor-suggest");
+  row.innerHTML = "";
+  MENTOR_QA.forEach(qa=>{
+    const chip = document.createElement("button");
+    chip.className = "suggest-chip"; chip.textContent = t(qa.qKey);
+    chip.addEventListener("click", ()=>{ addMentorMsg(t(qa.qKey),"user"); setTimeout(()=>addMentorMsg(t(qa.aKey),"bot"),350); });
+    row.appendChild(chip);
+  });
+}
+function mentorRespond(text){
+  addMentorMsg(text, "user");
+  const lower = text.toLowerCase();
+  const hit = MENTOR_QA.find(qa=>qa.kw.some(k=>lower.includes(k.toLowerCase())));
+  setTimeout(()=>addMentorMsg(hit ? t(hit.aKey) : t("mentor_fallback"), "bot"), 400);
+}
+document.getElementById("mentor-send").addEventListener("click", ()=>{
+  const input = document.getElementById("mentor-text");
+  const val = input.value.trim(); if(!val) return;
+  mentorRespond(val); input.value = "";
+});
+document.getElementById("mentor-text").addEventListener("keydown", e=>{
+  if(e.key==="Enter"){ document.getElementById("mentor-send").click(); }
+});
+
+/* ---------------------------------------------------------------------- */
+/*  Lang / theme toggles                                                    */
+/* ---------------------------------------------------------------------- */
+document.getElementById("lang-toggle").addEventListener("click", ()=>{
+  LANG = LANG==="en" ? "te" : "en";
+  applyI18n();
+});
+document.getElementById("theme-toggle").addEventListener("click", ()=>{
+  const root = document.documentElement;
+  const cur = root.getAttribute("data-theme");
+  if(cur==="dark"){ root.setAttribute("data-theme","light"); }
+  else if(cur==="light"){ root.removeAttribute("data-theme"); }
+  else { root.setAttribute("data-theme","dark"); }
+});
+
+/* ---------------------------------------------------------------------- */
+/*  Boot                                                                    */
+/* ---------------------------------------------------------------------- */
+applyI18n();
+})();
+</script>
